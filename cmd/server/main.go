@@ -26,6 +26,18 @@ func main() {
 		log.Fatalf("failed to create RabbitMQ channel: %v", err)
 	}
 
+	_, queue, err := pubsub.DeclareAndBind(
+		connection,                               // conn
+		routing.ExchangePerilTopic,               // exchange
+		routing.GameLogSlug,                      // queueName
+		fmt.Sprintf("%s.*", routing.GameLogSlug), // key
+		pubsub.SimpleQueueDurable,                // queueType
+	)
+	if err != nil {
+		log.Fatalf("failed to create %s queue: %v", routing.GameLogSlug, err)
+	}
+	log.Printf("created %s queue", queue.Name)
+
 	running := true
 	gamelogic.PrintServerHelp()
 	for running {
