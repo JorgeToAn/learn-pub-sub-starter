@@ -98,15 +98,17 @@ func SubscribeJSON[T any](
 
 	// handle messages from the channel
 	go func() {
-		for delivery := range deliveryCh {
-			var data T
-			err := json.Unmarshal(delivery.Body, &data)
+		defer ch.Close()
+
+		for message := range deliveryCh {
+			var v T
+			err := json.Unmarshal(message.Body, &v)
 			if err != nil {
-				log.Printf("failed to unmarshal delivery body: %v", err)
+				log.Printf("failed to unmarshal message: %v", err)
 				continue
 			}
-			handler(data)
-			delivery.Ack(false)
+			handler(v)
+			message.Ack(false)
 		}
 	}()
 
