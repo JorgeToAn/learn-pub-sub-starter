@@ -26,19 +26,19 @@ func main() {
 		log.Fatalf("%v", err)
 	}
 
-	_, queue, err := pubsub.DeclareAndBind(
-		connection,
-		routing.ExchangePerilDirect,
-		fmt.Sprintf("%s.%s", routing.PauseKey, username),
-		routing.PauseKey,
-		pubsub.SimpleQueueTransient,
+	gameState := gamelogic.NewGameState(username)
+
+	err = pubsub.SubscribeJSON(
+		connection,                  // conn
+		routing.ExchangePerilDirect, // exchange
+		fmt.Sprintf("%s.%s", routing.PauseKey, username), // queueName
+		routing.PauseKey,            // key
+		pubsub.SimpleQueueTransient, // queueType
+		handlerPause(gameState),     // handler
 	)
 	if err != nil {
-		log.Fatalf("failed to create transient queue: %v", err)
+		log.Fatalf("failed to subscribe to pause queue: %v", err)
 	}
-	log.Printf("Created '%s' queue\n", queue.Name)
-
-	gameState := gamelogic.NewGameState(username)
 
 	running := true
 	for running {
