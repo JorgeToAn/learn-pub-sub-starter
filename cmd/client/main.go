@@ -19,25 +19,42 @@ func main() {
 		log.Fatalf("failed to connect to RabbitMQ: %v", err)
 	}
 	defer connection.Close()
-	fmt.Println("Connected to RabbitMQ")
+	log.Println("Connected to RabbitMQ")
+
+	publishCh, err := connection.Channel()
+	if err != nil {
+		log.Fatalf("failed to create RabbitMQ channel: %v", err)
+	}
 
 	username, err := gamelogic.ClientWelcome()
 	if err != nil {
 		log.Fatalf("%v", err)
 	}
 
-	gameState := gamelogic.NewGameState(username)
+	gs := gamelogic.NewGameState(username)
 
 	err = pubsub.SubscribeJSON(
-		connection,                  // conn
-		routing.ExchangePerilDirect, // exchange
-		fmt.Sprintf("%s.%s", routing.PauseKey, username), // queueName
-		routing.PauseKey,            // key
-		pubsub.SimpleQueueTransient, // queueType
-		handlerPause(gameState),     // handler
+		connection,                            // conn
+		routing.ExchangePerilDirect,           // exchange
+		routing.PauseKey+"."+gs.GetUsername(), // queueName
+		routing.PauseKey,                      // key
+		pubsub.SimpleQueueTransient,           // queueType
+		handlerPause(gs),                      // handler
 	)
 	if err != nil {
-		log.Fatalf("failed to subscribe to pause queue: %v", err)
+		log.Fatalf("failed to subscribe to pause messages: %v", err)
+	}
+
+	err = pubsub.SubscribeJSON(
+		connection,                 // conn
+		routing.ExchangePerilTopic, // exchange
+		routing.ArmyMovesPrefix+"."+gs.GetUsername(), // queueName
+		routing.ArmyMovesPrefix+".*",                 // key
+		pubsub.SimpleQueueTransient,                  // queueType
+		handlerMove(gs),                              // handler
+	)
+	if err != nil {
+		log.Fatalf("failed to subscribe to move messages: %v", err)
 	}
 
 	running := true
@@ -50,17 +67,30 @@ func main() {
 		command := words[0]
 		switch command {
 		case "move":
-			_, err := gameState.CommandMove(words)
+			move, err := gs.CommandMove(words)
 			if err != nil {
 				fmt.Println(err)
+				continue
 			}
+
+			err = pubsub.PublishJSON(
+				publishCh,                  // channel
+				routing.ExchangePerilTopic, // exchange
+				routing.ArmyMovesPrefix+"."+gs.GetUsername(), // key
+				move, // val
+			)
+			if err != nil {
+				log.Printf("failed to publish move: %v", err)
+				continue
+			}
+			log.Printf("Moved %v unit(s) to %s\n", len(move.Units), move.ToLocation)
 		case "spawn":
-			err := gameState.CommandSpawn(words)
+			err := gs.CommandSpawn(words)
 			if err != nil {
 				fmt.Println(err)
 			}
 		case "status":
-			gameState.CommandStatus()
+			gs.CommandStatus()
 		case "spam":
 			fmt.Println("Spamming not allowed yet!")
 		case "help":
