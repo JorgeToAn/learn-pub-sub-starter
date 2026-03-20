@@ -51,11 +51,20 @@ func main() {
 		routing.ArmyMovesPrefix+"."+gs.GetUsername(), // queueName
 		routing.ArmyMovesPrefix+".*",                 // key
 		pubsub.SimpleQueueTransient,                  // queueType
-		handlerMove(gs),                              // handler
+		handlerMove(publishCh, gs),                   // handler
 	)
 	if err != nil {
 		log.Fatalf("failed to subscribe to move messages: %v", err)
 	}
+
+	err = pubsub.SubscribeJSON(
+		connection,                         // conn
+		routing.ExchangePerilTopic,         // exchange
+		routing.WarRecognitionsPrefix,      // queue name
+		routing.WarRecognitionsPrefix+".*", // routing key
+		pubsub.SimpleQueueDurable,          // queue type
+		handlerWar(gs),                     // handler
+	)
 
 	running := true
 	for running {
@@ -99,7 +108,7 @@ func main() {
 			gamelogic.PrintQuit()
 			running = false
 		default:
-			fmt.Printf("Unknown command")
+			fmt.Println("Unknown command")
 		}
 	}
 
